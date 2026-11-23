@@ -205,6 +205,23 @@ function laskePaikat(maara = 199, rivit = 8) {
 
 ✅ Valmis, kun puolueen klikkaus himmentää muut, "Vain ministerit" näyttää 19 paikkaa ja "Tyhjennä suodattimet" palauttaa kaiken.
 
+> **Toteutettu – rajapinta Kassulle** (`static/js/salikartta.js`):
+>
+> ```js
+> // ES-moduulina
+> import { asetaSuodatin, tyhjennaSuodattimet, haeSuodatus } from './salikartta.js';
+> // tai mistä tahansa skriptistä
+> window.salikartta.asetaSuodatin({ puolue: 'kok', vaalipiiri: 'Uusimaa' });
+> ```
+>
+> | Funktio | Tekee |
+> |---|---|
+> | `asetaSuodatin({ puolue, vaalipiiri, vainMinisterit, haku })` | muuttaa vain annetut kentät, päivittää salin ja sivupalkin, palauttaa osumien määrän |
+> | `tyhjennaSuodattimet()` | kaikki oletuksiin |
+> | `haeSuodatus()` | `{ suodattimet, osumat }`: osumat ovat edustajaolioita, joita sort-työkalu voi järjestää ja listata |
+>
+> Hakukenttä on kytketty samaan rajapintaan (`haku`: nimen osa, kirjainkoolla ei väliä).
+
 ### Vaihe 8 – Hallitus vs. oppositio -palkki *(ID 9 yhdistettynä salikarttaan)*
 - Hae `/api/sali`, ja näytä palkissa `Hallitus N` (tumma) ja `Oppositio M` (harmaa) sekä leveys prosentteina.
 - Alle teksti: "Hallituspuolueet: SDP, KESK, VIHR, VAS, RKP · enemmistöraja 101". Puolueet tulevat datasta.

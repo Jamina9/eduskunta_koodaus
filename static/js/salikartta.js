@@ -8,11 +8,14 @@ const tila = {
   edustajat: [],          // paikkajärjestyksessä
   puolueet: new Map(),    // koodi -> { nimi, lyhenne, vari, hallitus, paikat }
   valittu: null,          // valittu edustaja
-  // Suodattimet otetaan käyttöön vaiheessa 7:
-  puolue: null,
-  vaalipiiri: '',
+  // Suodattimet (vaihe 7). Muuta näitä vain asetaSuodatin()-funktiolla.
+  puolue: null,           // puoluekoodi, esim. 'sd', tai null = kaikki
+  vaalipiiri: '',         // '' = kaikki
   vainMinisterit: false,
+  haku: '',               // nimihaku, kirjainkoolla ei väliä
 };
+
+const OLETUSSUODATTIMET = { puolue: null, vaalipiiri: '', vainMinisterit: false, haku: '' };
 
 const $ = (id) => document.getElementById(id);
 
@@ -68,13 +71,73 @@ function paikanNimi(e) {
   return `${paikka}: ${koko_nimi(e)} (${p.lyhenne})`;
 }
 
-/** Osuuko edustaja nykyisiin suodattimiin (käyttöön vaiheessa 7). */
+/** Osuuko edustaja nykyisiin suodattimiin. */
 function osuu(e) {
+  const haku = tila.haku.trim().toLocaleLowerCase('fi');
   return (
     (!tila.puolue || e.party === tila.puolue) &&
     (!tila.vaalipiiri || e.constituency === tila.vaalipiiri) &&
-    (!tila.vainMinisterit || e.minister)
+    (!tila.vainMinisterit || e.minister) &&
+    (!haku || koko_nimi(e).toLocaleLowerCase('fi').includes(haku))
   );
+}
+
+/* ---------------- Suodatus (vaihe 7) ---------------- */
+
+/**
+ * Yhteinen rajapinta suodattimille. Sivun omat kontrollit ja Kassun
+ * sort-työkalu kutsuvat tätä, jolloin kaikki ohjaavat samaa salia.
+ *
+ *   asetaSuodatin({ puolue: 'sd' })
+ *   asetaSuodatin({ vaalipiiri: 'Helsinki', vainMinisterit: true })
+ *   asetaSuodatin({ haku: 'marin' })
+ *
+ * Annetut kentät muuttuvat, muut pysyvät ennallaan. Palauttaa osumien määrän.
+ */
+export function asetaSuodatin(muutokset = {}) {
+  for (const avain of Object.keys(muutokset)) {
+    if (!(avain in OLETUSSUODATTIMET)) {
+      console.warn(`asetaSuodatin: tuntematon suodatin "${avain}"`);
+      continue;
+    }
+    tila[avain] = muutokset[avain] ?? OLETUSSUODATTIMET[avain];
+  }
+  paivitaSuodatinKontrollit();
+  return paivitaSali();
+}
+
+/** Palauttaa kaikki suodattimet oletuksiin. */
+export function tyhjennaSuodattimet() {
+  return asetaSuodatin({ ...OLETUSSUODATTIMET });
+}
+
+/** Nykyiset suodattimet (kopio) ja niihin osuvat edustajat. */
+export function haeSuodatus() {
+  const suodattimet = Object.fromEntries(Object.keys(OLETUSSUODATTIMET).map((k) => [k, tila[k]]));
+  return { suodattimet, osumat: tila.edustajat.filter(osuu) };
+}
+
+/** Pitää sivupalkin kontrollit samassa tilassa kuin suodattimet. */
+function paivitaSuodatinKontrollit() {
+  for (const nappi of $('puoluelista').querySelectorAll('.puolue')) {
+    nappi.setAttribute('aria-pressed', String(nappi.dataset.koodi === tila.puolue));
+  }
+  $('vaalipiiri').value = tila.vaalipiiri;
+  $('vainMinisterit').checked = tila.vainMinisterit;
+  if ($('haku').value !== tila.haku) $('haku').value = tila.haku;
+}
+
+function kytkeSuodattimet() {
+  $('puoluelista').addEventListener('click', (t) => {
+    const nappi = t.target.closest('.puolue');
+    if (!nappi) return;
+    const koodi = nappi.dataset.koodi;
+    asetaSuodatin({ puolue: tila.puolue === koodi ? null : koodi }); // toinen klikkaus poistaa
+  });
+  $('vaalipiiri').addEventListener('change', (t) => asetaSuodatin({ vaalipiiri: t.target.value }));
+  $('vainMinisterit').addEventListener('change', (t) => asetaSuodatin({ vainMinisterit: t.target.checked }));
+  $('haku').addEventListener('input', (t) => asetaSuodatin({ haku: t.target.value }));
+  $('tyhjenna').addEventListener('click', tyhjennaSuodattimet);
 }
 
 /* ---------------- Salin piirto ---------------- */
@@ -136,6 +199,7 @@ function paivitaSali() {
   }
   $('nakyvissa').textContent = nakyvissa;
   $('yhteensa').textContent = tila.edustajat.length;
+  return nakyvissa;
 }
 
 /* ---------------- Valittu edustaja -paneeli ---------------- */
@@ -229,6 +293,8 @@ async function kaynnista() {
     piirraVaalipiirit(vaalipiirit);
     piirraVoimasuhteet(sali);
     luoSali();
+    kytkeSuodattimet();
+    paivitaSuodatinKontrollit();
     paivitaSali();
     paivitaPaneeli();
   } catch (virhe) {
@@ -244,5 +310,9 @@ async function kaynnista() {
     if (nappi) valitse(Number(nappi.dataset.nro));
   });
 }
+
+// Muut skriptit (esim. Kassun sort-työkalu) voivat käyttää suodatusta myös
+// ilman importia: window.salikartta.asetaSuodatin({ puolue: 'kok' })
+window.salikartta = { asetaSuodatin, tyhjennaSuodattimet, haeSuodatus };
 
 kaynnista();
