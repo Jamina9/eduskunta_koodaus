@@ -6,11 +6,11 @@ Ryhmän yhteinen repo, johon tallennetaan Tietojärjestelmien kehittäminen -kur
 
 ## ▶ Katso projektia
 
-**https://raw.githack.com/Jamina9/eduskunta_koodaus/main/static/index.html**
+**https://jamina9.github.io/eduskunta_koodaus/**
 
-Linkki avaa sivun suoraan repon `main`-haarasta, eikä sen katsomiseen tarvitse asentaa mitään. Ilman Flask-palvelinta sivu lukee datan suoraan `mps.json`- ja `puolueet.json`-tiedostoista.
+Linkki näyttää aina `main`-haaran uusimman version, eikä sen katsomiseen tarvitse asentaa mitään. Ilman Flask-palvelinta sivu lukee datan suoraan `mps.json`- ja `puolueet.json`-tiedostoista.
 
-> Kun GitHub Pages on otettu käyttöön, virallinen osoite on https://jamina9.github.io/eduskunta_koodaus/. Repon omistaja voi ottaa sen käyttöön: Settings → Pages → Source: *Deploy from a branch* → `main` / `(root)`.
+> Linkki toimii, kun repon omistaja on ottanut GitHub Pagesin käyttöön: **Settings → Pages → Build and deployment → Source: *Deploy from a branch* → Branch: `main`, kansio `/ (root)` → Save**. Julkaisu kestää ensimmäisellä kerralla 1–2 minuuttia.
 
 ## Tiimi
 
