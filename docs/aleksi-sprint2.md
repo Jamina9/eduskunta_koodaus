@@ -185,7 +185,7 @@ function laskePaikat(maara = 199, rivit = 8) {
 
 ✅ Valmis, kun salissa on 199 nappia ja puhemies. Värit vastaavat puolueita, ja saman puolueen paikat ovat ryhmässä (tarkista silmämääräisesti).
 
-> Huom: oikea istumajärjestys ei välttämättä kulje tasan vasemmalta oikealle. Tämä on ensimmäinen versio, ja numerointia voi tarkentaa myöhemmin vertaamalla eduskunnan salikarttaan.
+> **Toteutettu:** datan perusteella paikat 1–199 kulkevat **rivi kerrallaan edestä taakse ja vasemmalta oikealle**. Jokaisella rivillä puolueet ovat järjestyksessä vasemmistosta oikeistoon (vas, sd, vihr, kesk, r, kd, kok, ps). Rivien pituudet ovat `[16, 22, 26, 32, 30, 29, 26, 18]` (= 199), ja ne on päätelty kohdista, joissa järjestys hyppää takaisin vasemmalle. Siksi `laskePaikat()` käyttää näitä rivejä eikä tasajakoa.
 
 ### Vaihe 6 – Napin toimiminen *(Salikartan teknillinen työstäminen)*
 1. Pidä tila yhdessä oliossa: `const tila = { valittu: null, puolue: null, vaalipiiri: '', vainMinisterit: false }`.
@@ -204,6 +204,23 @@ function laskePaikat(maara = 199, rivit = 8) {
 4. Sovi Kassun kanssa yhteinen rajapinta, esim. `asetaSuodatin({ puolue, vaalipiiri, vainMinisterit })`, jotta hänen sort- ja suodatinnappinsa ohjaavat samaa salia.
 
 ✅ Valmis, kun puolueen klikkaus himmentää muut, "Vain ministerit" näyttää 19 paikkaa ja "Tyhjennä suodattimet" palauttaa kaiken.
+
+> **Toteutettu – rajapinta Kassulle** (`static/js/salikartta.js`):
+>
+> ```js
+> // ES-moduulina
+> import { asetaSuodatin, tyhjennaSuodattimet, haeSuodatus } from './salikartta.js';
+> // tai mistä tahansa skriptistä
+> window.salikartta.asetaSuodatin({ puolue: 'kok', vaalipiiri: 'Uusimaa' });
+> ```
+>
+> | Funktio | Tekee |
+> |---|---|
+> | `asetaSuodatin({ puolue, vaalipiiri, vainMinisterit, haku })` | muuttaa vain annetut kentät, päivittää salin ja sivupalkin, palauttaa osumien määrän |
+> | `tyhjennaSuodattimet()` | kaikki oletuksiin |
+> | `haeSuodatus()` | `{ suodattimet, osumat }`: osumat ovat edustajaolioita, joita sort-työkalu voi järjestää ja listata |
+>
+> Hakukenttä on kytketty samaan rajapintaan (`haku`: nimen osa, kirjainkoolla ei väliä).
 
 ### Vaihe 8 – Hallitus vs. oppositio -palkki *(ID 9 yhdistettynä salikarttaan)*
 - Hae `/api/sali`, ja näytä palkissa `Hallitus N` (tumma) ja `Oppositio M` (harmaa) sekä leveys prosentteina.
