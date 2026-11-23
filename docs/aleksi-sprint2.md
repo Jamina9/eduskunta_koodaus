@@ -185,7 +185,7 @@ function laskePaikat(maara = 199, rivit = 8) {
 
 ✅ Valmis, kun salissa on 199 nappia ja puhemies. Värit vastaavat puolueita, ja saman puolueen paikat ovat ryhmässä (tarkista silmämääräisesti).
 
-> Huom: oikea istumajärjestys ei välttämättä kulje tasan vasemmalta oikealle. Tämä on ensimmäinen versio, ja numerointia voi tarkentaa myöhemmin vertaamalla eduskunnan salikarttaan.
+> **Toteutettu:** datan perusteella paikat 1–199 kulkevat **rivi kerrallaan edestä taakse ja vasemmalta oikealle**. Jokaisella rivillä puolueet ovat järjestyksessä vasemmistosta oikeistoon (vas, sd, vihr, kesk, r, kd, kok, ps). Rivien pituudet ovat `[16, 22, 26, 32, 30, 29, 26, 18]` (= 199), ja ne on päätelty kohdista, joissa järjestys hyppää takaisin vasemmalle. Siksi `laskePaikat()` käyttää näitä rivejä eikä tasajakoa.
 
 ### Vaihe 6 – Napin toimiminen *(Salikartan teknillinen työstäminen)*
 1. Pidä tila yhdessä oliossa: `const tila = { valittu: null, puolue: null, vaalipiiri: '', vainMinisterit: false }`.
