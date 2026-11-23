@@ -15,18 +15,10 @@ app.json.ensure_ascii = False  # ääkköset sellaisenaan JSON-vastauksiin
 with open(HAKEMISTO / "mps.json", encoding="utf-8") as f:
     EDUSTAJAT = json.load(f)
 
-# Puoluekoodi -> (nimi, lyhenne näytölle, väri)
-PUOLUEET = {
-    "sd":   ("Suomen Sosialidemokraattinen Puolue", "SDP",  "#E11931"),
-    "ps":   ("Perussuomalaiset",                    "PS",   "#D9A400"),
-    "kok":  ("Kansallinen Kokoomus",                "KOK",  "#006288"),
-    "kesk": ("Suomen Keskusta",                     "KESK", "#01954B"),
-    "vihr": ("Vihreä liitto",                       "VIHR", "#4CAF1F"),
-    "vas":  ("Vasemmistoliitto",                    "VAS",  "#E5195E"),
-    "r":    ("Ruotsalainen kansanpuolue",           "RKP",  "#FFE08A"),
-    "kd":   ("Kristillisdemokraatit",               "KD",   "#1F5BC4"),
-    "liik": ("Liike Nyt",                           "LIIK", "#8E5BB5"),
-}
+# Puoluekoodi -> {nimi, lyhenne, vari}. Sama tiedosto on käytössä myös
+# selaimessa, kun sivua katsotaan ilman palvelinta (ks. static/js/api.js).
+with open(HAKEMISTO / "puolueet.json", encoding="utf-8") as f:
+    PUOLUEET = json.load(f)
 TUNTEMATON_VARI = "#8A93A3"
 
 # Hallituspuolue = puolue, jolla on vähintään yksi ministeri.
@@ -38,14 +30,8 @@ ENEMMISTORAJA = len(EDUSTAJAT) // 2 + 1
 
 def puolue_tiedot(koodi):
     """Puolueen nimi, lyhenne ja väri. Tuntematon koodi ei kaada sovellusta."""
-    nimi, lyhenne, vari = PUOLUEET.get(koodi, (koodi, koodi.upper(), TUNTEMATON_VARI))
-    return {
-        "koodi": koodi,
-        "nimi": nimi,
-        "lyhenne": lyhenne,
-        "vari": vari,
-        "hallitus": koodi in HALLITUS,
-    }
+    tiedot = PUOLUEET.get(koodi, {"nimi": koodi, "lyhenne": koodi.upper(), "vari": TUNTEMATON_VARI})
+    return {"koodi": koodi, **tiedot, "hallitus": koodi in HALLITUS}
 
 
 @app.get("/")

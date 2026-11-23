@@ -1,0 +1,47 @@
+{
+  "sd": {
+    "nimi": "Suomen Sosialidemokraattinen Puolue",
+    "lyhenne": "SDP",
+    "vari": "#E11931"
+  },
+  "ps": {
+    "nimi": "Perussuomalaiset",
+    "lyhenne": "PS",
+    "vari": "#D9A400"
+  },
+  "kok": {
+    "nimi": "Kansallinen Kokoomus",
+    "lyhenne": "KOK",
+    "vari": "#006288"
+  },
+  "kesk": {
+    "nimi": "Suomen Keskusta",
+    "lyhenne": "KESK",
+    "vari": "#01954B"
+  },
+  "vihr": {
+    "nimi": "Vihreä liitto",
+    "lyhenne": "VIHR",
+    "vari": "#4CAF1F"
+  },
+  "vas": {
+    "nimi": "Vasemmistoliitto",
+    "lyhenne": "VAS",
+    "vari": "#E5195E"
+  },
+  "r": {
+    "nimi": "Ruotsalainen kansanpuolue",
+    "lyhenne": "RKP",
+    "vari": "#FFE08A"
+  },
+  "kd": {
+    "nimi": "Kristillisdemokraatit",
+    "lyhenne": "KD",
+    "vari": "#1F5BC4"
+  },
+  "liik": {
+    "nimi": "Liike Nyt",
+    "lyhenne": "LIIK",
+    "vari": "#8E5BB5"
+  }
+}
