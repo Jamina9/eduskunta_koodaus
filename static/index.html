@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Salikartta</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<script type="module" src="js/salikartta.js"></script>
+</head>
+<body>
+  <header class="ylapalkki">
+    <a class="logo" href="/">
+      <svg aria-hidden="true" width="30" height="30" viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 24a12 12 0 0 1 24 0"/><path d="M8 24a7 7 0 0 1 14 0"/><circle cx="15" cy="24" r="1.6" fill="var(--accent)" stroke="none"/></svg>
+      <span>Salikartta</span>
+    </a>
+    <nav aria-label="Päävalikko" class="paavalikko">
+      <a href="/" aria-current="page">Kartta</a>
+      <a href="#">Edustajat</a>
+      <a href="#">Hallitus</a>
+      <a href="#">Tilastot</a>
+    </nav>
+    <div class="haku">
+      <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <label for="haku" class="sr">Hae edustajaa</label>
+      <input id="haku" type="search" placeholder="Hae edustajaa nimellä" autocomplete="off">
+    </div>
+  </header>
+
+  <main class="asettelu">
+    <!-- Suodattimet: kaikki kulkevat asetaSuodatin()-funktion kautta (salikartta.js) -->
+    <aside class="kortti suodattimet" aria-label="Suodattimet">
+      <div class="ryhma">
+        <h2 class="otsake">Puolueet</h2>
+        <div id="puoluelista" class="puoluelista"></div>
+      </div>
+      <div class="ryhma">
+        <label for="vaalipiiri" class="otsake">Vaalipiiri</label>
+        <select id="vaalipiiri">
+          <option value="">Kaikki vaalipiirit</option>
+        </select>
+      </div>
+      <label class="valinta">
+        <input id="vainMinisterit" type="checkbox">
+        <span>Vain ministerit</span>
+      </label>
+      <button id="tyhjenna" type="button" class="nappi toissijainen">Tyhjennä suodattimet</button>
+    </aside>
+
+    <section class="kortti sali" aria-labelledby="sali-otsikko">
+      <div class="sali-yla">
+        <h1 id="sali-otsikko">Täysistuntosali</h1>
+        <p class="hiljainen"><strong id="nakyvissa">–</strong> / <span id="yhteensa">200</span> edustajaa näkyvissä</p>
+      </div>
+
+      <div id="salikartta" class="salikartta" role="group" aria-label="Istumapaikat">
+        <!-- salikartta.js piirtää paikkanapit tähän -->
+      </div>
+
+      <div class="voimasuhteet">
+        <div class="voimasuhteet-luvut">
+          <span><strong>Hallitus</strong> <span id="hallitusLkm">–</span></span>
+          <span><strong>Oppositio</strong> <span id="oppositioLkm">–</span></span>
+        </div>
+        <div class="palkki" aria-hidden="true"><div id="hallitusPalkki" class="palkki-hallitus"></div></div>
+        <p id="hallitusTeksti" class="pieni hiljainen"></p>
+      </div>
+    </section>
+
+    <aside class="kortti paneeli" aria-labelledby="valittu-otsake" aria-live="polite">
+      <p id="valittu-otsake" class="otsake">Valittu edustaja</p>
+      <div id="paneeliTyhja" class="hiljainen">Klikkaa mitä tahansa paikkaa salissa.</div>
+      <div id="paneeliSisalto" hidden>
+        <div class="henkilo">
+          <div id="pKuva" class="nimikirjaimet" aria-hidden="true"></div>
+          <div class="henkilo-teksti">
+            <h2 id="pNimi"></h2>
+            <span id="pPuolue" class="toissijainen-teksti"></span>
+          </div>
+        </div>
+        <span id="pMinisteri" class="merkki" hidden>
+          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>
+          <span id="pMinisteriTeksti">Ministeri</span>
+        </span>
+        <dl class="tiedot">
+          <div><dt>Vaalipiiri</dt><dd id="pVaalipiiri"></dd></div>
+          <div><dt>Paikka</dt><dd id="pPaikka"></dd></div>
+          <div><dt>Syntymävuosi</dt><dd id="pVuosi"></dd></div>
+          <div><dt>Ikä</dt><dd id="pIka"></dd></div>
+        </dl>
+        <div class="toiminnot">
+          <a id="pProfiili" href="#" class="nappi ensisijainen">Avaa profiili</a>
+          <div class="toiminnot-rivi">
+            <!-- Vertailu = ID 10, sprintti 3 -->
+            <button type="button" class="nappi toissijainen" disabled title="Tulossa sprintissä 3">Vertaa</button>
+            <a id="pTwitter" class="nappi toissijainen" href="#" target="_blank" rel="noopener" hidden>
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 4l16 16M20 4L4 20"/></svg>
+              X-tili
+            </a>
+          </div>
+        </div>
+      </div>
+      <p class="pieni hiljainen vinkki">Vinkki: paikkoja voi selata myös Tab-näppäimellä ja valita Enterillä.</p>
+    </aside>
+  </main>
+
+  <p id="virhe" class="virhe" role="alert" hidden></p>
+</body>
+</html>

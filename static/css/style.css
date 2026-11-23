@@ -1,0 +1,277 @@
+/* Salikartta – tyyli (värit ja fontit mallista) */
+:root {
+  --bg: #F4F5F7;
+  --surface: #FFFFFF;
+  --border: #E3E6EB;
+  --input-border: #D5D9E0;
+  --ink: #14181F;
+  --ink-2: #3B4250;
+  --muted: #5B6372;
+  --accent: #1D4ED8;
+  --accent-hover: #1E3A8A;
+  --accent-soft: #EEF2FF;
+  --opposition: #B9C0CC;
+  --radius-card: 14px;
+  --radius-ctrl: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+a { color: var(--accent); }
+a:hover { color: var(--accent-hover); }
+
+h1, h2 { margin: 0; }
+h1, .logo span { font-family: 'Space Grotesk', sans-serif; font-weight: 700; letter-spacing: -0.01em; }
+
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.hiljainen { color: var(--muted); }
+.pieni { font-size: 13px; }
+.toissijainen-teksti { color: var(--ink-2); font-size: 14px; }
+
+.otsake {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---------- Yläpalkki ---------- */
+.ylapalkki {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 14px 32px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.logo { display: flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; }
+.logo:hover { color: var(--ink); }
+.logo span { font-size: 22px; }
+
+.paavalikko { display: flex; flex-wrap: wrap; gap: 4px; }
+.paavalikko a {
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-weight: 500;
+  text-decoration: none;
+}
+.paavalikko a:hover { background: var(--bg); color: var(--ink); }
+.paavalikko a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+.haku {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 340px;
+  min-width: 220px;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-ctrl);
+  background: var(--surface);
+  color: var(--muted);
+}
+.haku:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.haku input { flex: 1; min-width: 0; border: 0; outline: none; font: inherit; color: var(--ink); background: transparent; }
+
+/* ---------- Asettelu ---------- */
+.asettelu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 24px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 32px;
+}
+.kortti {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  max-width: 100%;
+}
+
+/* ---------- Suodattimet ---------- */
+.suodattimet { flex: 1 1 240px; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+.ryhma { display: flex; flex-direction: column; gap: 6px; }
+.puoluelista { display: flex; flex-direction: column; gap: 2px; }
+.puolue {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.puolue:hover { background: var(--bg); }
+.puolue[aria-pressed="true"] { background: var(--accent-soft); }
+.puolue .pallo { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.puolue .lyhenne { font-weight: 600; width: 44px; }
+.puolue .nimi { flex: 1; color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.puolue .lkm { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+select {
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-ctrl);
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+}
+.valinta { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; font-weight: 500; }
+.valinta input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+/* ---------- Napit ---------- */
+.nappi {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: var(--radius-ctrl);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.nappi.ensisijainen { border: 0; background: var(--accent); color: #FFFFFF; }
+.nappi.ensisijainen:hover { background: var(--accent-hover); color: #FFFFFF; }
+.nappi.toissijainen { border: 1px solid var(--input-border); background: var(--surface); color: var(--ink); }
+.nappi.toissijainen:hover { background: var(--bg); color: var(--ink); }
+.nappi:disabled { opacity: 0.5; cursor: not-allowed; }
+.nappi[hidden] { display: none; }
+:is(.nappi, .puolue, select):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- Sali ---------- */
+.sali { flex: 999 1 560px; min-width: 0; padding: 24px 28px; display: flex; flex-direction: column; gap: 20px; }
+.sali-yla { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+.sali-yla h1 { font-size: 28px; }
+.sali-yla p { margin: 0; }
+.sali-yla strong { color: var(--ink); }
+
+.salikartta { position: relative; width: 100%; aspect-ratio: 2 / 1.02; }
+
+.paikka {
+  position: absolute;
+  width: 2.3%;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.paikka:hover { transform: translate(-50%, -50%) scale(1.25); z-index: 1; }
+.paikka:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; z-index: 2; }
+.paikka.himmea { opacity: 0.15; }
+.paikka[aria-pressed="true"] { box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 5px var(--ink); z-index: 2; }
+
+.puhemies {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.puhemies .koroke { display: block; width: 96px; height: 14px; border-radius: 4px; background: var(--ink); }
+.puhemies .teksti { font-size: 12px; color: var(--muted); font-weight: 500; }
+.puhemies:hover .koroke { background: var(--ink-2); }
+.puhemies:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.puhemies[aria-pressed="true"] .koroke { box-shadow: 0 0 0 3px #FFFFFF, 0 0 0 5px var(--ink); }
+
+.voimasuhteet { display: flex; flex-direction: column; gap: 8px; }
+.voimasuhteet-luvut { display: flex; justify-content: space-between; font-size: 14px; }
+.palkki { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--opposition); }
+.palkki-hallitus { width: 0; background: var(--ink); transition: width 0.3s; }
+.voimasuhteet p { margin: 0; }
+
+/* ---------- Valittu edustaja ---------- */
+.paneeli { flex: 1 1 300px; padding: 24px; display: flex; flex-direction: column; gap: 18px; }
+#paneeliSisalto { display: flex; flex-direction: column; gap: 18px; }
+#paneeliSisalto[hidden] { display: none; }
+.henkilo { display: flex; align-items: center; gap: 14px; }
+.henkilo-teksti { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.henkilo-teksti h2 { font-size: 20px; font-weight: 700; }
+.nimikirjaimet {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 22px;
+}
+.merkki {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 600;
+}
+.merkki[hidden] { display: none; }
+.tiedot { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+.tiedot dt { font-size: 12px; color: var(--muted); }
+.tiedot dd { margin: 2px 0 0; font-weight: 600; }
+.toiminnot { display: flex; flex-direction: column; gap: 10px; }
+.toiminnot-rivi { display: flex; gap: 10px; }
+.toiminnot-rivi .nappi { flex: 1; }
+.vinkki { margin: 0; border-top: 1px solid var(--border); padding-top: 14px; }
+
+.virhe {
+  max-width: 1440px;
+  margin: 0 auto 24px;
+  padding: 12px 32px;
+  color: #9F1020;
+  font-weight: 600;
+}
+
+/* ---------- Kapea näyttö (tarkempi mobiiliversio vaiheessa 9) ---------- */
+@media (max-width: 720px) {
+  .ylapalkki { padding: 12px 16px; }
+  .haku { margin-left: 0; flex: 1 1 100%; }
+  .asettelu { padding: 16px; gap: 16px; }
+  .sali { padding: 16px 12px; }
+  .paikka { width: 2.6%; }
+  .puhemies .koroke { width: 56px; height: 8px; }
+}
