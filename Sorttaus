@@ -1,0 +1,649 @@
+from __future__ import annotations
+
+import json
+import time
+import urllib.parse
+import urllib.request
+from datetime import date
+from pathlib import Path
+
+INPUT_FILE = Path("seating.json")
+OUTPUT_FILE = Path("seating_enriched.json")
+WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql"
+USER_AGENT = "EduskuntaSeatingEnricher/1.1 (Python urllib)"
+
+REQUIRED_ENRICHED_KEYS = {"sukupuoli", "syntymaaika", "ika", "vaalipiiri", "koulutus", "ammatti"}
+
+GENDER_MAP = {
+    "http://www.wikidata.org/entity/Q6581097": "mies",
+    "http://www.wikidata.org/entity/Q6581072": "nainen",
+}
+
+GENERIC_OCCUPATIONS = {"poliitikko", "kansanedustaja", "politician", "ministeri"}
+
+
+def run_sparql(query: str) -> list[dict]:
+    """Suorittaa SPARQL-kyselyn Wikidatan rajapintaan."""
+    data = urllib.parse.urlencode({"query": query}).encode("utf-8")
+    req = urllib.request.Request(
+        WIKIDATA_ENDPOINT,
+        data=data,
+        headers={
+            "Accept": "application/sparql-results+json",
+            "User-Agent": USER_AGENT,
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=30) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    time.sleep(0.3)
+    return payload["results"]["bindings"]
+
+
+def _extract_qid(uri: str | None) -> str | None:
+    if not uri:
+        return None
+    qid = uri.rsplit("/", 1)[-1]
+    return qid if qid.startswith("Q") else None
+
+
+def parse_wikidata_date(date_str: str | None) -> date | None:
+    if not date_str:
+        return None
+    clean = date_str.lstrip("+").split("T")[0]
+    try:
+        return date.fromisoformat(clean)
+    except ValueError:
+        return None
+
+
+def calculate_age(birth_date: date | None, death_date: date | None = None) -> int | None:
+    if not birth_date:
+        return None
+    ref = death_date if death_date else date.today()
+    return ref.year - birth_date.year - ((ref.month, ref.day) < (birth_date.month, birth_date.day))
+
+
+def parse_gender(row: dict) -> str | None:
+    uri = row.get("genderItem", {}).get("value")
+    if uri in GENDER_MAP:
+        return GENDER_MAP[uri]
+    label = row.get("genderLabel", {}).get("value")
+    return label.lower() if label else None
+
+
+def resolve_qids_by_heteka(heteka_ids: list[str]) -> dict[str, str]:
+    """Yhdistää hetekaId:t Wikidatan Q-tunnisteisiin (P2181)."""
+    if not heteka_ids:
+        return {}
+    values_str = " ".join(f'"{hid}"' for hid in heteka_ids)
+    query = f"""
+    SELECT ?hetekaId (SAMPLE(?person) AS ?person) WHERE {{
+      VALUES ?hetekaId {{ {values_str} }}
+      ?person wdt:P2181 ?hetekaId .
+    }}
+    GROUP BY ?hetekaId
+    """
+    result: dict[str, str] = {}
+    for row in run_sparql(query):
+        qid = _extract_qid(row.get("person", {}).get("value"))
+        if qid:
+            result[row["hetekaId"]["value"]] = qid
+    return result
+
+
+def resolve_qids_by_names(full_names: list[str]) -> dict[str, str]:
+    """Varahaku Q-tunnisteille nimen perusteella, jos P2181 puuttuu Wikidatasta."""
+    if not full_names:
+        return {}
+    escaped = [n.replace('"', '\\"') for n in full_names]
+    values_str = " ".join(f'"{name}"@fi' for name in escaped)
+    query = f"""
+    SELECT ?fullName (SAMPLE(?person) AS ?person) WHERE {{
+      VALUES ?fullName {{ {values_str} }}
+      ?person rdfs:label ?fullName .
+      ?person wdt:P31 wd:Q5 .
+      ?person wdt:P27 wd:Q33 .
+    }}
+    GROUP BY ?fullName
+    """
+    result: dict[str, str] = {}
+    for row in run_sparql(query):
+        qid = _extract_qid(row.get("person", {}).get("value"))
+        if qid:
+            result[row["fullName"]["value"]] = qid
+    return result
+
+
+def fetch_basic_info(qids: list[str]) -> dict[str, dict]:
+    """Hakee syntymäajan, mahdollisen kuolinajan ja sukupuolen."""
+    if not qids:
+        return {}
+    values_str = " ".join(f"wd:{qid}" for qid in qids)
+    query = f"""
+    SELECT ?person
+           (SAMPLE(?birth) AS ?dob)
+           (SAMPLE(?death) AS ?dod)
+           (SAMPLE(?gItem) AS ?genderItem)
+           (SAMPLE(?gLabel) AS ?genderLabel)
+    WHERE {{
+      VALUES ?person {{ {values_str} }}
+      OPTIONAL {{ ?person wdt:P569 ?birth . }}
+      OPTIONAL {{ ?person wdt:P570 ?death . }}
+      OPTIONAL {{
+        ?person wdt:P21 ?gItem .
+        OPTIONAL {{ ?gItem rdfs:label ?gLabel . FILTER(LANG(?gLabel) = "fi") }}
+      }}
+    }}
+    GROUP BY ?person
+    """
+    results: dict[str, dict] = {}
+    for row in run_sparql(query):
+        qid = _extract_qid(row.get("person", {}).get("value"))
+        if not qid:
+            continue
+        dob = parse_wikidata_date(row.get("dob", {}).get("value"))
+        dod = parse_wikidata_date(row.get("dod", {}).get("value"))
+        results[qid] = {
+            "sukupuoli": parse_gender(row),
+            "syntymaaika": dob.isoformat() if dob else None,
+            "ika": calculate_age(dob, dod),
+        }
+    return results
+
+
+def fetch_districts(qids: list[str]) -> dict[str, str]:
+    """Hakee tuoreimman eduskuntakauden vaalipiirin (P39/Q17592486 -> P768)."""
+    if not qids:
+        return {}
+    values_str = " ".join(f"wd:{qid}" for qid in qids)
+    query = f"""
+    SELECT ?person ?districtLabel ?start ?end WHERE {{
+      VALUES ?person {{ {values_str} }}
+      ?person p:P39 ?stmt .
+      ?stmt ps:P39 wd:Q17592486 ;
+            pq:P768 ?district .
+      OPTIONAL {{ ?stmt pq:P580 ?start . }}
+      OPTIONAL {{ ?stmt pq:P582 ?end . }}
+      OPTIONAL {{ ?district rdfs:label ?fiLabel . FILTER(LANG(?fiLabel) = "fi") }}
+      OPTIONAL {{ ?district rdfs:label ?enLabel . FILTER(LANG(?enLabel) = "en") }}
+      BIND(COALESCE(?fiLabel, ?enLabel) AS ?districtLabel)
+      FILTER(BOUND(?districtLabel))
+    }}
+    """
+    candidates: dict[str, list[tuple[int, str, str, str]]] = {}
+    for row in run_sparql(query):
+        qid = _extract_qid(row.get("person", {}).get("value"))
+        label = row.get("districtLabel", {}).get("value")
+        if not qid or not label:
+            continue
+        start = row.get("start", {}).get("value", "")
+        end = row.get("end", {}).get("value", "")
+        is_current = 1 if not end else 0
+        candidates.setdefault(qid, []).append((is_current, end, start, label))
+
+    return {
+        qid: max(rows, key=lambda item: (item[0], item[1], item[2]))[3]
+        for qid, rows in candidates.items()
+    }
+
+
+def fetch_education(qids: list[str]) -> dict[str, list[str]]:
+    """Hakee tutkinnot (P512) ja oppilaitokset (P69)."""
+    if not qids:
+        return {}
+    values_str = " ".join(f"wd:{qid}" for qid in qids)
+    query = f"""
+    SELECT DISTINCT ?person ?kind ?label WHERE {{
+      VALUES ?person {{ {values_str} }}
+      {{
+        ?person wdt:P512 ?item .
+        BIND("tutkinto" AS ?kind)
+      }} UNION {{
+        ?person p:P69 ?eduStmt .
+        ?eduStmt pq:P512 ?item .
+        BIND("tutkinto" AS ?kind)
+      }} UNION {{
+        ?person wdt:P69 ?item .
+        BIND("oppilaitos" AS ?kind)
+      }}
+      OPTIONAL {{ ?item rdfs:label ?fiLabel . FILTER(LANG(?fiLabel) = "fi") }}
+      OPTIONAL {{ ?item rdfs:label ?enLabel . FILTER(LANG(?enLabel) = "en") }}
+      BIND(COALESCE(?fiLabel, ?enLabel) AS ?label)
+      FILTER(BOUND(?label))
+    }}
+    """
+    raw: dict[str, dict[str, set[str]]] = {}
+    for row in run_sparql(query):
+        qid = _extract_qid(row.get("person", {}).get("value"))
+        kind = row.get("kind", {}).get("value")
+        label = row.get("label", {}).get("value")
+        if not qid or not label or not kind:
+            continue
+        bucket = raw.setdefault(qid, {"tutkinto": set(), "oppilaitos": set()})
+        bucket[kind].add(label)
+
+    results: dict[str, list[str]] = {}
+    for qid, bucket in raw.items():
+        combined: list[str] = []
+        seen: set[str] = set()
+        for item in sorted(bucket["tutkinto"], key=str.lower) + sorted(bucket["oppilaitos"], key=str.lower):
+            key = item.lower()
+            if key not in seen:
+                seen.add(key)
+                combined.append(item)
+        results[qid] = combined
+    return results
+
+
+def fetch_occupations(qids: list[str]) -> dict[str, list[str]]:
+    """Hakee ammatit (P106) niin, että tarkemmat ammatit tulevat ensin."""
+    if not qids:
+        return {}
+    values_str = " ".join(f"wd:{qid}" for qid in qids)
+    query = f"""
+    SELECT DISTINCT ?person ?label WHERE {{
+      VALUES ?person {{ {values_str} }}
+      ?person wdt:P106 ?occ .
+      OPTIONAL {{ ?occ rdfs:label ?fiLabel . FILTER(LANG(?fiLabel) = "fi") }}
+      OPTIONAL {{ ?occ rdfs:label ?enLabel . FILTER(LANG(?enLabel) = "en") }}
+      BIND(COALESCE(?fiLabel, ?enLabel) AS ?label)
+      FILTER(BOUND(?label))
+    }}
+    """
+    raw: dict[str, set[str]] = {}
+    for row in run_sparql(query):
+        qid = _extract_qid(row.get("person", {}).get("value"))
+        label = row.get("label", {}).get("value")
+        if qid and label:
+            raw.setdefault(qid, set()).add(label)
+
+    results: dict[str, list[str]] = {}
+    for qid, labels in raw.items():
+        ordered = sorted(
+            labels,
+            key=lambda s: (1 if s.lower() in GENERIC_OCCUPATIONS else 0, s.lower()),
+        )
+        results[qid] = ordered
+    return results
+
+
+def enrich_seating_data(
+    input_path: Path = INPUT_FILE,
+    output_path: Path = OUTPUT_FILE,
+) -> list[dict]:
+    """Rikastaa seating.json-datan Wikidatasta ja tallentaa uuden JSON-tiedoston."""
+    members = json.loads(input_path.read_text(encoding="utf-8"))
+    heteka_ids = [str(m["hetekaId"]) for m in members]
+
+    print("1/5 Yhdistetään edustajat Wikidataan hetekaId:llä...")
+    hid_to_qid = resolve_qids_by_heteka(heteka_ids)
+
+    missing_names = [
+        f"{m['firstname']} {m['lastname']}"
+        for m in members
+        if str(m["hetekaId"]) not in hid_to_qid
+    ]
+    name_to_qid = resolve_qids_by_names(missing_names) if missing_names else {}
+
+    member_qids: dict[str, str] = {}
+    for m in members:
+        hid = str(m["hetekaId"])
+        full_name = f"{m['firstname']} {m['lastname']}"
+        qid = hid_to_qid.get(hid) or name_to_qid.get(full_name)
+        if qid:
+            member_qids[hid] = qid
+
+    unique_qids = sorted(set(member_qids.values()))
+
+    print("2/5 Haetaan syntymäajat ja sukupuolet...")
+    basic_lookup = fetch_basic_info(unique_qids)
+
+    print("3/5 Haetaan vaalipiirit...")
+    district_lookup = fetch_districts(unique_qids)
+
+    print("4/5 Haetaan koulutustiedot (tutkinnot ja oppilaitokset)...")
+    education_lookup = fetch_education(unique_qids)
+
+    print("5/5 Haetaan ammatit...")
+    occupation_lookup = fetch_occupations(unique_qids)
+
+    enriched = []
+    for m in members:
+        hid = str(m["hetekaId"])
+        qid = member_qids.get(hid)
+        basic = basic_lookup.get(qid, {}) if qid else {}
+
+        updated = dict(m)
+        updated["sukupuoli"] = basic.get("sukupuoli")
+        updated["syntymaaika"] = basic.get("syntymaaika")
+        updated["ika"] = basic.get("ika")
+        updated["vaalipiiri"] = district_lookup.get(qid) if qid else None
+        updated["koulutus"] = education_lookup.get(qid, []) if qid else []
+        updated["ammatti"] = occupation_lookup.get(qid, []) if qid else []
+        enriched.append(updated)
+
+    output_path.write_text(
+        json.dumps(enriched, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    print(f"Valmis! Tallennettu tiedostoon: {output_path}")
+    return enriched
+
+
+def filter_members(
+    members: list[dict],
+    *,
+    gender: str | None = None,
+    parties: list[str] | None = None,
+    districts: list[str] | None = None,
+    min_age: int | None = None,
+    max_age: int | None = None,
+    minister: bool | None = None,
+    name_query: str | None = None,
+    education_query: str | None = None,
+    occupation_query: str | None = None,
+    min_seat: int | None = None,
+    max_seat: int | None = None,
+) -> list[dict]:
+    """
+    Suodattaa edustajalistaa yhden tai useamman ehdon perusteella.
+    Tyhjät (None) parametrit ohitetaan.
+    """
+    result = members
+
+    if gender:
+        target_gender = gender.strip().lower()
+        result = [m for m in result if (m.get("sukupuoli") or "").lower() == target_gender]
+
+    if parties:
+        allowed_parties = {p.strip().lower() for p in parties if p.strip()}
+        if allowed_parties:
+            result = [m for m in result if (m.get("party") or "").lower() in allowed_parties]
+
+    if districts:
+        district_terms = [d.strip().lower() for d in districts if d.strip()]
+        if district_terms:
+            result = [
+                m
+                for m in result
+                if any(term in (m.get("vaalipiiri") or "").lower() for term in district_terms)
+            ]
+
+    if min_age is not None:
+        result = [m for m in result if m.get("ika") is not None and m["ika"] >= min_age]
+
+    if max_age is not None:
+        result = [m for m in result if m.get("ika") is not None and m["ika"] <= max_age]
+
+    if minister is not None:
+        result = [m for m in result if bool(m.get("minister")) is minister]
+
+    if name_query:
+        q = name_query.strip().lower()
+        result = [
+            m
+            for m in result
+            if q in f"{m.get('firstname', '')} {m.get('lastname', '')}".lower()
+            or q in f"{m.get('lastname', '')} {m.get('firstname', '')}".lower()
+        ]
+
+    if education_query:
+        q = education_query.strip().lower()
+        result = [
+            m
+            for m in result
+            if any(q in edu.lower() for edu in (m.get("koulutus") or []))
+        ]
+
+    if occupation_query:
+        q = occupation_query.strip().lower()
+        result = [
+            m
+            for m in result
+            if any(q in occ.lower() for occ in (m.get("ammatti") or []))
+        ]
+
+    if min_seat is not None:
+        result = [m for m in result if m.get("seatNumber") is not None and m["seatNumber"] >= min_seat]
+
+    if max_seat is not None:
+        result = [m for m in result if m.get("seatNumber") is not None and m["seatNumber"] <= max_seat]
+
+    return result
+
+
+def sort_members(
+    members: list[dict],
+    sort_by: str = "ika",
+    descending: bool = False,
+) -> list[dict]:
+    """
+    Lajittelee edustajat annetun kentän mukaan.
+    Tuetut arvot: 'ika', 'sukupuoli', 'sukunimi', 'puolue', 'vaalipiiri', 'paikka'
+    """
+    if sort_by == "ika":
+        known = [m for m in members if m.get("ika") is not None]
+        unknown = [m for m in members if m.get("ika") is None]
+        known.sort(key=lambda m: (m["ika"], m["lastname"], m["firstname"]), reverse=descending)
+        return known + unknown
+
+    if sort_by == "sukupuoli":
+        known = [m for m in members if m.get("sukupuoli") is not None]
+        unknown = [m for m in members if m.get("sukupuoli") is None]
+        known.sort(key=lambda m: (m["ika"] if m.get("ika") is not None else 999, m["lastname"]))
+        known.sort(key=lambda m: m["sukupuoli"], reverse=descending)
+        return known + unknown
+
+    if sort_by == "sukunimi":
+        return sorted(members, key=lambda m: (m["lastname"].lower(), m["firstname"].lower()), reverse=descending)
+
+    if sort_by == "puolue":
+        return sorted(
+            members,
+            key=lambda m: ((m.get("party") or "").lower(), m["lastname"].lower()),
+            reverse=descending,
+        )
+
+    if sort_by == "vaalipiiri":
+        known = [m for m in members if m.get("vaalipiiri")]
+        unknown = [m for m in members if not m.get("vaalipiiri")]
+        known.sort(key=lambda m: (m["vaalipiiri"].lower(), m["lastname"].lower()), reverse=descending)
+        return known + unknown
+
+    if sort_by == "paikka":
+        return sorted(members, key=lambda m: m.get("seatNumber", 999), reverse=descending)
+
+    raise ValueError(
+        "Tuntematon lajitteluperuste. Käytä: ika, sukupuoli, sukunimi, puolue, vaalipiiri tai paikka."
+    )
+
+
+def _truncate(text: str, max_len: int) -> str:
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1] + "…"
+
+
+def print_members(members: list[dict], limit: int | None = None) -> None:
+    """Tulostaa edustajat tiiviinä taulukkona sekä joukon perustilastot."""
+    rows = members[:limit] if limit else members
+    header = (
+        f"\n{'Nimi':<25} {'Puolue':<6} {'Sukup.':<7} {'Ikä':>3} "
+        f"{'Vaalipiiri':<22} {'Koulutus':<26} {'Ammatti':<24}"
+    )
+    print(header)
+    print("-" * len(header))
+
+    for m in rows:
+        name = _truncate(f"{m['lastname']}, {m['firstname']}", 25)
+        party = m.get("party", "-")
+        gender = m.get("sukupuoli") or "-"
+        age = str(m["ika"]) if m.get("ika") is not None else "-"
+        district = _truncate((m.get("vaalipiiri") or "-").replace(" vaalipiiri", ""), 22)
+        edu = _truncate(", ".join(m.get("koulutus") or []) or "-", 26)
+        occ = _truncate(", ".join(m.get("ammatti") or []) or "-", 24)
+        print(f"{name:<25} {party:<6} {gender:<7} {age:>3} {district:<22} {edu:<26} {occ:<24}")
+
+    ages = [m["ika"] for m in members if m.get("ika") is not None]
+    avg_age = f"{sum(ages) / len(ages):.1f} v" if ages else "-"
+    women = sum(1 for m in members if m.get("sukupuoli") == "nainen")
+    men = sum(1 for m in members if m.get("sukupuoli") == "mies")
+    ministers = sum(1 for m in members if m.get("minister"))
+
+    print(
+        f"\nOsumia: {len(members)} (näytetään {len(rows)}) | "
+        f"Keski-ikä: {avg_age} | Naisia: {women}, Miehiä: {men} | Ministereitä: {ministers}"
+    )
+
+
+def print_member_details(members: list[dict]) -> None:
+    """Tulostaa yksittäisen edustajan (tai hakutulosten) kaikki koulutus- ja ammattitiedot lyhentämättä."""
+    for m in members:
+        print(f"\n{m['firstname']} {m['lastname']} ({m.get('party', '-')})")
+        print(f"  Ikä / sukupuoli : {m.get('ika', '-')} v ({m.get('syntymaaika') or '-'}), {m.get('sukupuoli') or '-'}")
+        print(f"  Vaalipiiri      : {m.get('vaalipiiri') or '-'}")
+        print(f"  Ministeri       : {'Kyllä' if m.get('minister') else 'Ei'} | Paikka: {m.get('seatNumber', '-')}")
+        print(f"  Koulutus        : {', '.join(m.get('koulutus') or []) or '-'}")
+        print(f"  Ammatti         : {', '.join(m.get('ammatti') or []) or '-'}")
+
+
+def _ask_int(prompt: str) -> int | None:
+    raw = input(prompt).strip()
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        print("  -> Virheellinen luku, ohitetaan ehto.")
+        return None
+
+
+def run_custom_filter(members: list[dict]) -> None:
+    print("\n--- Yhdistelmäsuodatus (jätä tyhjäksi ohittaaksesi) ---")
+    available_parties = sorted({m["party"] for m in members if m.get("party")})
+    available_districts = sorted({m["vaalipiiri"] for m in members if m.get("vaalipiiri")})
+
+    print(f"Puolueet   : {', '.join(available_parties)}")
+    print(f"Vaalipiirit: {', '.join(d.replace(' vaalipiiri', '') for d in available_districts)}")
+
+    parties_raw = input("Puolueet (pilkulla eroteltuna, esim. kok,ps): ").strip()
+    parties = [p.strip() for p in parties_raw.split(",") if p.strip()] if parties_raw else None
+
+    districts_raw = input("Vaalipiirit (osanimi pilkulla, esim. helsingin,pirkanmaan): ").strip()
+    districts = [d.strip() for d in districts_raw.split(",") if d.strip()] if districts_raw else None
+
+    gender_raw = input("Sukupuoli (mies / nainen): ").strip().lower()
+    gender = gender_raw if gender_raw in {"mies", "nainen"} else None
+
+    min_age = _ask_int("Vähimmäisikä: ")
+    max_age = _ask_int("Enimmäisikä: ")
+
+    min_raw = input("Ministeriasema (k = vain ministerit, e = vain riviedustajat): ").strip().lower()
+    minister = True if min_raw == "k" else False if min_raw == "e" else None
+
+    education_query = input("Koulutushaku (esim. maisteri, tohtori, helsingin yliopisto): ").strip() or None
+    occupation_query = input("Ammattihaku (esim. lääkäri, yrittäjä, opettaja): ").strip() or None
+    name_query = input("Nimihaku (etu- tai sukunimen osa): ").strip() or None
+
+    min_seat = _ask_int("Paikkanumero alkaen (0–199): ")
+    max_seat = _ask_int("Paikkanumero asti (0–199): ")
+
+    filtered = filter_members(
+        members,
+        gender=gender,
+        parties=parties,
+        districts=districts,
+        min_age=min_age,
+        max_age=max_age,
+        minister=minister,
+        name_query=name_query,
+        education_query=education_query,
+        occupation_query=occupation_query,
+        min_seat=min_seat,
+        max_seat=max_seat,
+    )
+
+    valid_sorts = {"ika", "sukupuoli", "sukunimi", "puolue", "vaalipiiri", "paikka"}
+    sort_by = input("Lajittelu (ika / sukupuoli / sukunimi / puolue / vaalipiiri / paikka) [ika]: ").strip().lower() or "ika"
+    if sort_by not in valid_sorts:
+        sort_by = "ika"
+    desc = input("Laskeva järjestys? (k/e) [e]: ").strip().lower() == "k"
+
+    print_members(sort_members(filtered, sort_by=sort_by, descending=desc))
+
+
+def interactive_cli(members: list[dict]) -> None:
+    while True:
+        print("\n--- Kansanedustajien haku- ja lajittelutyökalu ---")
+        print("1. Yhdistelmäsuodatus (kaikki kentät)")
+        print("2. Lajittele iän mukaan (nuorimmasta vanhimpaan)")
+        print("3. Lajittele iän mukaan (vanhimmasta nuorimpaan)")
+        print("4. Lajittele sukupuolen mukaan")
+        print("5. Suodata vaalipiirillä")
+        print("6. Suodata koulutuksella (tutkinto tai oppilaitos)")
+        print("7. Suodata ammatilla")
+        print("8. Näytä vain ministerit")
+        print("9. Hae edustajan täydet tiedot nimellä")
+        print("10. Päivitä tiedot uudelleen internetistä")
+        print("0. Lopeta")
+
+        choice = input("Valitse toiminto (0–10): ").strip()
+        if choice == "0":
+            break
+        elif choice == "1":
+            run_custom_filter(members)
+        elif choice == "2":
+            print_members(sort_members(members, sort_by="ika", descending=False))
+        elif choice == "3":
+            print_members(sort_members(members, sort_by="ika", descending=True))
+        elif choice == "4":
+            print_members(sort_members(members, sort_by="sukupuoli", descending=False))
+        elif choice == "5":
+            available = sorted({m["vaalipiiri"].replace(" vaalipiiri", "") for m in members if m.get("vaalipiiri")})
+            print(f"Vaalipiirit: {', '.join(available)}")
+            q = input("Anna vaalipiirin osa (esim. pirkanmaan, uudenmaan): ").strip()
+            filtered = filter_members(members, districts=q.split(","))
+            print_members(sort_members(filtered, sort_by="ika"))
+        elif choice == "6":
+            q = input("Anna tutkinto tai oppilaitos (esim. maisteri, aalto, tohtori): ").strip()
+            filtered = filter_members(members, education_query=q)
+            print_members(sort_members(filtered, sort_by="ika"))
+        elif choice == "7":
+            q = input("Anna ammatti (esim. lääkäri, yrittäjä, poliisi, opettaja): ").strip()
+            filtered = filter_members(members, occupation_query=q)
+            print_members(sort_members(filtered, sort_by="ika"))
+        elif choice == "8":
+            filtered = filter_members(members, minister=True)
+            print_members(sort_members(filtered, sort_by="ika"))
+        elif choice == "9":
+            q = input("Anna edustajan nimen osa: ").strip()
+            filtered = filter_members(members, name_query=q)
+            if filtered:
+                print_member_details(sort_members(filtered, sort_by="sukunimi"))
+            else:
+                print("Ei osumia.")
+        elif choice == "10":
+            members = enrich_seating_data()
+        else:
+            print("Tuntematon valinta, yritä uudelleen.")
+
+
+def load_or_enrich() -> list[dict]:
+    if OUTPUT_FILE.exists():
+        members = json.loads(OUTPUT_FILE.read_text(encoding="utf-8"))
+        if members and REQUIRED_ENRICHED_KEYS.issubset(members[0].keys()):
+            print(f"Ladataan data tiedostosta {OUTPUT_FILE}...")
+            return members
+        print("Vanha rikastettu tiedosto puuttuu uusista kentistä – päivitetään tiedot Wikidatasta...")
+    return enrich_seating_data()
+
+
+def main() -> None:
+    members = load_or_enrich()
+    interactive_cli(members)
+
+
+if __name__ == "__main__":
+    main()
